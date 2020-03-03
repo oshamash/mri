@@ -1,5 +1,7 @@
 MRI - Manageable Runtime Interface
 ==================================
+**MRI is a non-intrusive scan without ionizing radiation**
+
 **Debuggability made easy**
 
 Overview
