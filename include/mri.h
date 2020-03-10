@@ -12,6 +12,11 @@
 #define MRI_SLOT_FLAG_RATE		(1 << 1)	/* TODO(omer): Unused for now	*/
 #define MRI_SLOT_FLAG_PK		(1 << 2)
 #define MRI_SLOT_FLAG_HIDDEN	(1 << 3)
+
+typedef enum mri_iter_action {
+	MRI_ITER_STOP,
+	MRI_ITER_CONTINUE
+} mri_iter_action_t;
  
 /* typedefs */
 typedef uint8_t		mri_byte_t;
@@ -45,7 +50,7 @@ typedef struct {} mri_rate_shaper_t;	/* Numeric slot rate per second	*/
 /* Input: slot-data, size-of-slot, output-string			*/
 typedef int (*mri_formatter_cb)(void *, size_t, char *);
 /* Input: type-data, iteration-state-data, output-memory	*/
-typedef int (*mri_iterator_cb)(void *, mri_iter_state_t *, void *);
+typedef mri_iter_action_t (*mri_iterator_cb)(void *, mri_iter_state_t *, void **);
 /* Input: registered-context, cli-input, size-of-input		*/
 typedef int (*mri_config_change_cb)(void *, cstring_t, size_t);
 /* Input: list-of-samples, amount-of-samples, output-string	*/
@@ -53,9 +58,15 @@ typedef int (*mri_shaper_cb)(mri_capture_sample_t *, size_t, char *);
  
 /* prototypes */
  
-/* Notes:
+/**
+ * mri_init()
+ *
+ * Notes:
  *	Each instance can only be linked to one domain (! consider !)
  *	Instance is global to process having thread-oriented CB support
+ *
+ *	@param domain - root-path, shared, kind of like catagory (routing, system-events, em, etc...)
+ *	@returns C-Style boolean (0 = OK, <0 = ERROR) (-ERRNO)
  */
 int mri_init(const char *domain);
  

@@ -3,7 +3,12 @@
 #include <string_view>
 #include <unordered_map>
 
-#include "../include/mri.h"
+/* TODO(omer): Fix include path */
+extern "C" {
+	#include "../include/mri.h"
+//	#include "dn_common/general.h"
+};
+
 #include "../deps/ordered_map.h"
 
 /* TODO(omer): Change to something real */
@@ -63,8 +68,12 @@ struct xflat_type {
 	{}
 };
 
+/* TODO(omer): Consider enabling a flat-parse for an xtype (slot, slot, slot, ...) */
+
 /**
  * XTYPE
+ * Type which is composed from multiple slots (complex type)
+ * Those types are usually being registered to one or more xpath_node
  */
 struct xtype {
 	std::string					m_name;				/*!< Name of this X-Type (unique)			*/
