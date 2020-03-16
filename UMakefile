@@ -1,0 +1,20 @@
+$nil = 
+
+$cflags = -O2 -Wall -Wextra -Werror -pedantic -fPIC
+$lflags = -Wl,-zdefs -fPIC
+
+[variant:debug]
+$cflags = -O0 -g -ggdb -Wall -Wextra -Werror -pedantic -fPIC
+$lflags = -Wl,-zdefs -fPIC
+
+!c(includes, flags=$nil, cflags=$cflags) : gcc -c {filename} $includes $cflags $flags -o {target} > {dir}/{noext}.umake.o
+!cpp(includes, flags=$nil, cflags=$cflags) : g++ -std=c++17 -c {filename} $includes $cflags $flags -o {target} > {dir}/{noext}.umake.o
+!so(libs, flags=$nil, lflags=$lflags) : g++ -std=c++17 --shared {filename} $lflags $flags $libs -o {target}
+!a(libs) : ar rcs {target} {filename} $libs
+
+$mri_includes = -Iinclude -Ideps
+$mri_cxx_flags = -fno-exceptions
+
+:foreach src/*.c > !c($mri_includes)
+:foreach src/*.cpp > !cpp($mri_includes, $mri_cxx_flags)
+: src/*.umake.o > !so( ) > libmri.so
