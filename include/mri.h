@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <stddef.h>
 
+/* Logger related */
+#include "mri_logging.h"
+
 /* defines */
 #define MRI_MAX_SLOT_STR_SIZE	(256)
 #define MRI_USERDATA_SIZE		(32)
@@ -44,7 +47,7 @@ typedef struct {} mri_elapsed_time_t;	/* uint64_t monotonic diff		*/
 
 /* Provided shapers (multi-shapers) */
 typedef struct {} mri_rate_shaper_t;	/* Numeric slot rate per second	*/
- 
+
 /* Callbacks (TBD) */
 
 /* Input: slot-data, size-of-slot, output-string			*/
@@ -68,7 +71,7 @@ typedef int (*mri_shaper_cb)(mri_capture_sample_t *, size_t, char *);
  *	@param domain - root-path, shared, kind of like catagory (routing, system-events, em, etc...)
  *	@returns C-Style boolean (0 = OK, <0 = ERROR) (-ERRNO)
  */
-int mri_init(const char *domain);
+int mri_init(cstring_t domain);
  
 /* Formatting apart from provided-formatters section */
 int _mri_create_formatter(cstring_t name, mri_formatter_cb callback);
@@ -79,10 +82,10 @@ int _mri_create_formatter(cstring_t name, mri_formatter_cb callback);
 int _mri_create_shaper(cstring_t name, mri_shaper_cb callback);
  
 /* Registering types and data to MRI */
-int _mri_create_type(cstring_t name, size_t size);
-int _mri_type_add_slot(cstring_t type, cstring_t name, cstring_t formatter, size_t offset, size_t size, int slot_flags);
-int _mri_type_add_vslot(cstring_t type, cstring_t name, mri_formatter_cb callback);
-int _mri_type_add_shaper(cstring_t type, cstring_t name, cstring_t formatter, size_t offset, size_t size, cstring_t shaper);
+int _mri_create_type(cstring_t, size_t);
+int _mri_type_add_slot(cstring_t, cstring_t, cstring_t, size_t, size_t, int);
+int _mri_type_add_vslot(cstring_t, cstring_t, mri_formatter_cb);
+int _mri_type_add_shaper(cstring_t, cstring_t, cstring_t, size_t, size_t);
  
 /* Current suggestion:
  *	when someone registers data on path, we capture his thread-id and

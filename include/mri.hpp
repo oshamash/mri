@@ -27,7 +27,7 @@ int generic_mri_iterator_cb(void *container, mri_iter_state_t *state, void **mem
 
 		/**
 		 * Notice we disable the warning because normally one cannot copy-construct an iterator
-		 * This is purely a hack we use to avoid the need for having an in-container detecated iterator
+		 * This is purely a hack we use to avoid the need for having an in-container dedicated iterator
 		 */
 		#pragma GCC diagnostic push
 		#if __GNUC__ >= 8
