@@ -162,4 +162,7 @@ struct xpath_node {
 	{ mri_assert(parent || ! xdata);  }
 };
 
+/* Root node is available for all */
+extern xpath_node mri_root;
+
 #endif

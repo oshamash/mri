@@ -6,7 +6,7 @@
 
 /* TODO(omer): Fix include paths */
 extern "C" {
-	#include "mri.h"
+	#include "mri_producer.h"
 //	#include "dn_common/general.h"
 }
 
@@ -19,7 +19,9 @@ extern "C" {
 static mri_xtype_map_t		mri_xtypes;
 static mri_shaper_map_t		mri_shapers;
 static mri_formatter_map_t	mri_formatters;
-static xpath_node			mri_root ("/", nullptr, nullptr, nullptr, nullptr);
+
+/* Root-Node externalized for all */
+xpath_node mri_root ("/", nullptr, nullptr, nullptr, nullptr);
 
 #define MRI_MAP_INSERT(map, key, ...)																\
 	/* Note: ignore potential copy, even by using std::move, compiler optimization will fix this */	\
@@ -56,18 +58,6 @@ int xtype::add_slot(cstring_t slot, size_t offset, size_t size, mri_formatter_cb
 }
 
 extern "C" {
-
-	int mri_init(cstring_t domain) {
-		MRI_SAFE_MAP_INSERTION(	0,
-								xpath_node,
-								mri_root.m_sub_nodes,
-								domain,
-								nullptr,
-								&mri_root,
-								nullptr,
-								nullptr);
-	}
-
 	/* ---------------------------------------------------------------------------------------------
 	 * 							Delegators to map user-defined format/shaper
 	 * ---------------------------------------------------------------------------------------------

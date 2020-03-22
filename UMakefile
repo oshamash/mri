@@ -1,10 +1,10 @@
 $nil = 
 
-$cflags = -O2 -Wall -Wextra -Werror -pedantic -fPIC
+$cflags = -O2 -Wall -Wextra -Werror -fPIC
 $lflags = -Wl,-zdefs -fPIC
 
 [variant:debug]
-$cflags = -O0 -g -ggdb -Wall -Wextra -Werror -pedantic -fPIC
+$cflags = -O0 -g -ggdb -Wall -Wextra -Werror -fPIC
 $lflags = -Wl,-zdefs -fPIC
 
 !c(includes, flags=$nil, cflags=$cflags) : gcc -c {filename} $includes $cflags $flags -o {target} > {dir}/{noext}.umake.o

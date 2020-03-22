@@ -1,7 +1,9 @@
 #ifndef _MRI_GENERAL_HPP_
 #define _MRI_GENERAL_HPP_
 
-#include "mri_general.h"
+extern "C" {
+	#include "mri_general.h"
+}
 
 template <typename T>
 struct c_return {};

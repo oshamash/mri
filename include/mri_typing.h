@@ -15,8 +15,8 @@
 #define MRI_SLOT_FLAG_HIDDEN	(1 << 3)
 
 typedef enum mri_service_mode {
-	MRI_PRODUCER = 0b01,
-	MRI_CONSUMER = 0b10
+	MRI_PRODUCER = (1 << 0),
+	MRI_CONSUMER = (1 << 1)
 } mri_service_mode_t;
 
 typedef enum mri_iter_action {
