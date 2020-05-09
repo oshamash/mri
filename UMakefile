@@ -14,7 +14,8 @@ $lflags = -Wl,-zdefs -fPIC
 
 $mri_includes = -Iinclude -Ideps
 $mri_cxx_flags = -fno-exceptions
+$mri_linkage = -lhiredis
 
-:foreach src/*.c > !c($mri_includes)
-:foreach src/*.cpp > !cpp($mri_includes, $mri_cxx_flags)
-: src/*.umake.o > !so( ) > libmri.so
+:foreach **/*.c > !c($mri_includes)
+:foreach **/*.cpp > !cpp($mri_includes, $mri_cxx_flags)
+: **/*.umake.o > !so($mri_linkage) > libmri.so

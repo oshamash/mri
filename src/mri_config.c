@@ -8,12 +8,15 @@
 #include "mri_config_ext.h"
 
 /* Note: remember to update to have proper debugging later */
-const char *config_type_to_string(mri_config_value_t type) {
+cstring_t config_type_to_string(mri_config_value_t type) {
 	switch(type) {
 	case MRI_CONFIG_DOMAIN					: return "DOMAIN";
 	case MRI_CONFIG_SERVICE_DISCOVERY_HOST	: return "SERVICE_DISCOVERY_HOST";
 	case MRI_CONFIG_SERVICE_DISCOVERY_PORT	: return "SERVICE_DISCOVERY_PORT";
 	case MRI_CONFIG_SERVICE_DISCOVERY_TO_USE: return "SERVICE_DISCOVERY_TO_USE";
+	case MRI_CONFIG_REDIS_SD_TIMEOUT		: return "REDIS_SD_TIMEOUT";
+	case MRI_CONFIG_REDIS_SD_USE_SENTINEL	: return "REDIS_SD_USE_SETINEL";
+	case MRI_CONFIG_REDIS_SD_SENTINEL_MASTER: return "REDIS_SD_SETINEL_MASTER";
 	default									: return "UNKNOWN";
 	}
 }
@@ -22,32 +25,55 @@ struct mri_configuration {
 	mri_config_data_t config[MRI_CONFIG_MAX_VALUE];
 };
 
-int cstring_ref_handler(const char *input, mri_config_data_t *output) {
+int config_to_cstring_ref(const char *input, mri_config_data_t *output) {
 	output->data = (void *) input;
 	output->length = strnlen(input, MRI_CONFIG_MAX_STRING_SIZE);
 	return 0;
 }
 
+#include <strings.h>
+int config_to_boolean(const char *input, mri_config_data_t *output) {
+	if (0 == strcasecmp(input, "true")) {
+		output->data = (void *) 1;
+	} else if (0 == strcasecmp(input, "false")) {
+		output->data = (void *) 0;
+	} else {
+		MRI_LOG(MRI_ERROR, "Cannot parse boolean config (%s), not false/true", input);
+		return -1;
+	}
+
+	output->length = sizeof(int);
+	return 0;
+}
+
 /* External handlers from project */
-extern int config_to_service_discovery(const char *, mri_config_data_t *);
+extern int config_to_timeval			(const char *, mri_config_data_t *);
+extern int config_to_service_discovery	(const char *, mri_config_data_t *);
 
 /* Array of typedef int (config_handler_cb)(const char *input, mri_config_data_t *output); */
 static int (*handle_config_cb[MRI_CONFIG_MAX_VALUE])(const char *, mri_config_data_t *) = {
 	/* Note: we assume input is from main() so no need to allocate */
-	[MRI_CONFIG_DOMAIN]						= cstring_ref_handler,
-	[MRI_CONFIG_SERVICE_DISCOVERY_HOST]		= cstring_ref_handler,
-	[MRI_CONFIG_SERVICE_DISCOVERY_PORT]		= cstring_ref_handler,
-	[MRI_CONFIG_SERVICE_DISCOVERY_TO_USE]	= config_to_service_discovery
+	[MRI_CONFIG_DOMAIN]						= config_to_cstring_ref,
+	[MRI_CONFIG_SERVICE_DISCOVERY_HOST]		= config_to_cstring_ref,
+	[MRI_CONFIG_SERVICE_DISCOVERY_PORT]		= config_to_cstring_ref,
+	[MRI_CONFIG_SERVICE_DISCOVERY_TO_USE]	= config_to_service_discovery,
+	/* Redis related */
+	[MRI_CONFIG_REDIS_SD_TIMEOUT]			= config_to_timeval,
+	[MRI_CONFIG_REDIS_SD_USE_SENTINEL]		= config_to_boolean,
+	[MRI_CONFIG_REDIS_SD_SENTINEL_MASTER]	= config_to_cstring_ref
 };
 
 static int parse_opts(struct mri_configuration *conf, int argc, char **argv) {
 	int option_index;
 	struct option long_options[] = {
-		{ "domain",				required_argument,	0, MRI_CONFIG_DOMAIN					},
-		{ "sd-host",			required_argument,	0, MRI_CONFIG_SERVICE_DISCOVERY_HOST	},
-		{ "sd-port",			required_argument,	0, MRI_CONFIG_SERVICE_DISCOVERY_PORT	},
-		{ "service-discovery",	required_argument,	0, MRI_CONFIG_SERVICE_DISCOVERY_TO_USE	},
-		{ 0,					0,					0, 0									}
+		{ "domain",					required_argument,	0, MRI_CONFIG_DOMAIN					},
+		{ "sd-host",				required_argument,	0, MRI_CONFIG_SERVICE_DISCOVERY_HOST	},
+		{ "sd-port",				required_argument,	0, MRI_CONFIG_SERVICE_DISCOVERY_PORT	},
+		{ "service-discovery",		required_argument,	0, MRI_CONFIG_SERVICE_DISCOVERY_TO_USE	},
+		{ "redis-timeout",			required_argument,	0, MRI_CONFIG_REDIS_SD_TIMEOUT			},
+		{ "redis-with-sentinel",	required_argument,	0, MRI_CONFIG_REDIS_SD_USE_SENTINEL		},
+		{ "redis-sentinel-master",	required_argument,	0, MRI_CONFIG_REDIS_SD_SENTINEL_MASTER	},
+		{ 0,						0,					0, 0									}
 	};
 
 	/* Fetch first option and loop */

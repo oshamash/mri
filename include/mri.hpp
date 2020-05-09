@@ -17,6 +17,8 @@ template <	typename container_t,
 			typename iterator_t	= typename container_t::iterator,
 			typename value_t	= typename container_t::value_type	>
 int generic_mri_iterator_cb(void *container, mri_iter_state_t *state, void **mem) {
+	if (! container || ! state || ! mem) return MRI_ITER_ERR;
+
 	/* We are getting the templated type as data */
 	auto const &data_view = *((container_t *) container);
 

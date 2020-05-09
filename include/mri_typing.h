@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/types.h>
 
 /* defines */
 #define MRI_MAX_HOST_SIZE		(128)
@@ -20,6 +21,7 @@ typedef enum mri_service_mode {
 } mri_service_mode_t;
 
 typedef enum mri_iter_action {
+	MRI_ITER_ERR,
 	MRI_ITER_STOP,
 	MRI_ITER_CONTINUE
 } mri_iter_action_t;

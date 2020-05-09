@@ -17,9 +17,21 @@ typedef enum mri_config_value {
 	MRI_CONFIG_SERVICE_DISCOVERY_PORT,
 	MRI_CONFIG_SERVICE_DISCOVERY_TO_USE,
 
+	/* Redis specific */
+	MRI_CONFIG_REDIS_SD_TIMEOUT,
+	MRI_CONFIG_REDIS_SD_USE_SENTINEL,
+	MRI_CONFIG_REDIS_SD_SENTINEL_MASTER,
+
 	/* Never go beyond this point */
 	MRI_CONFIG_MAX_VALUE
 } mri_config_value_t;
+
+/**
+ * Convert key to human-readable string (log usage)
+ *	@param type - the enumeration value for the key
+ *	@return cstring_t - string representing the enum-value
+ */
+cstring_t config_type_to_string(mri_config_value_t type);
 
 /**
  * Create configuration object

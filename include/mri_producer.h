@@ -1,6 +1,7 @@
 #ifndef _MRI_PRODUCER_H_
 #define _MRI_PRODUCER_H_
 
+#include "mri_sched.h"
 #include "mri_typing.h"
 
 /* Formatting apart from provided-formatters section */
@@ -18,15 +19,15 @@ int _mri_type_add_vslot(cstring_t, cstring_t, mri_formatter_cb);
 int _mri_type_add_shaper(cstring_t, cstring_t, cstring_t, size_t, size_t);
  
 /* Current suggestion:
- *	when someone registers data on path, we capture his thread-id and
- *	allow him to poll on an event object that is related to his thread-id
+ *	when someone registers data on path, we capture his thread-id,
+ *	this will allow for poll on an event object that is related to his thread-id.
+ *	MRI will use data in <sched> to register the event-object for the user to poll on.
+ *	Ultimatly this will allow user to synchronise access to registered data without (b)locking.
  *
- *	mri_get_eventloop_fd() will allow user to allocate time for MRI in any bitch-thread
- *	mri_get_notification_fd() will allow to get the thread-bound event-fd to poll in relevant thread
+ *	If none are provided, thread's data will use the default MRI sched (provided in init, or mri-thread)
  */
-int mri_get_eventloop_fd();
-int mri_get_notification_fd();
- 
+int mri_set_current_thread_sched(mri_sched_info_t *sched);
+
 /* Registering data of defined types to MRI */
 int _mri_register(cstring_t path, cstring_t type, void *object, mri_iterator_cb callback);
 int mri_register_config(cstring_t path, void *context, mri_config_change_cb callback);

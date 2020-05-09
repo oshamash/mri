@@ -2,16 +2,14 @@
 #define _MRI_DATA_HPP_
 
 #include <string>
+#include <memory>
 #include <stdint.h>
 #include <string_view>
-
-/* gettid() is undefined in glibc, use this instead */
-#include <unistd.h>
-#include <sys/syscall.h>
-typedef pid_t tid_t;
-static tid_t _gettid() { return syscall(SYS_gettid); }
-
 #include "mri_typing.hpp"
+
+/* glibc doesn't declare tid_t properly */
+#include <sys/types.h>
+typedef pid_t tid_t;
 
 /* TODO(omer): Fix this */
 #define mri_assert(cond) (void) 0 
@@ -22,14 +20,19 @@ struct xformat;
 struct xshaper;
 struct mri_slot;
 struct xpath_node;
+struct mri_thread_sched;
 struct slot_capture_data;
 
-using mri_slot_map_t = mri_ordered_map<cstring_t, mri_slot>;
-using mri_subpath_map_t = mri_ordered_map<cstring_t, xpath_node>;
-using mri_capture_map_t = mri_unordered_map<cstring_t, slot_capture_data>;
-using mri_formatter_map_t = mri_unordered_map<cstring_t, xformat>;
-using mri_shaper_map_t = mri_unordered_map<cstring_t, xshaper>;
-using mri_xtype_map_t = mri_unordered_map<cstring_t, xtype>;
+using mri_slot_map_t = mri_ordered_map<cstring_t, std::unique_ptr<mri_slot>>;
+using mri_subpath_map_t = mri_ordered_map<std::string_view, std::unique_ptr<xpath_node>>;
+using mri_capture_map_t = mri_unordered_map<cstring_t, std::unique_ptr<slot_capture_data>>;
+using mri_formatter_map_t = mri_unordered_map<cstring_t, std::unique_ptr<xformat>>;
+using mri_shaper_map_t = mri_unordered_map<cstring_t, std::unique_ptr<xshaper>>;
+using mri_xtype_map_t = mri_unordered_map<cstring_t, std::unique_ptr<xtype>>;
+using mri_thread_sched_map_t = mri_ordered_map<tid_t, std::unique_ptr<mri_thread_sched>>;
+using mri_result_t = mri_array<mri_byte_t, MRI_MAX_SLOT_STR_SIZE>;
+using mri_result_set_t = mri_vector<mri_result_t>;
+using mri_node_result_set_t = mri_vector<mri_result_set_t>;
 
 struct xformat {
 	std::string			m_name;
@@ -119,6 +122,28 @@ struct xtype {
 	 *	@return C-Style boolean (0 = OK, <0 = ERROR) (-ERRNO)
 	 */
 	int add_slot(cstring_t slot, size_t offset, size_t size, mri_formatter_cb formatter, int flags);
+
+	/**
+	 * Dump the data based on this type
+	 *	@param input - input data that coresponds to this type
+	 *	@param rs - result set to add into (one result per-slot)
+	 *	@return bool - did function work properly
+	 */
+	bool xdump(void *input, mri_result_set_t &rs);
+};
+
+struct xnode_get {
+	tid_t			m_tid;				/*>! Thread whom registered node (origin)	*/
+	xtype			*m_type;			/*>! Type coresponding with the node's data	*/
+	void			*m_xdata;			/*>! User-defined data (node data internal)	*/
+	mri_iterator_cb	m_xdata_iterator;	/*>! User-defined data iterator (tableview)	*/
+};
+
+struct xnode_set {
+	tid_t					m_tid;			/*>! Thread whom registered node (origin)	*/
+	xtype					*m_type;		/*>! Type coresponding with the node's data	*/
+	void					*m_xcontext;	/*>! User-defined data (xcallbck's context)	*/
+	mri_config_change_cb	m_xcallback;	/*>! User-defined callback to handle data	*/
 };
 
 /**
@@ -127,39 +152,55 @@ struct xtype {
  */
 struct xpath_node {
 	/* General definition of a node */
-	std::string			m_name;				/*>! Name of node (name unique per parent)	*/
-	mri_subpath_map_t	m_sub_nodes;		/*>! Mapping of sub-nodes (each is unique)	*/
-	xtype				*m_type;			/*>! Type coresponding with the node's data	*/
-	xpath_node			*m_parent;			/*>! Reverse reference to the parent's node	*/
+	std::string			m_name;			/*>! Name of node (name unique per parent)	*/
+	mri_subpath_map_t	m_sub_nodes;	/*>! Mapping of sub-nodes (each is unique)	*/
+	xpath_node			*m_parent;		/*>! Reverse reference to the parent's node	*/
 
 	/* User-data (specified on registration) */
-	tid_t				m_tid;				/*>! Thread whom registered node (origin)	*/
-	void				*m_xdata;			/*>! User-defined data (node data internal)	*/
-	mri_iterator_cb		m_xdata_iterator;	/*>! User-defined data iterator (tableview)	*/
+	xnode_get			m_get_data;		/*>! Get context (used for node-querying)		*/
+	xnode_set			m_set_data;		/*>! Set context (used for node-configuring)	*/
 
 	/**
 	 * Notes:
 	 *	1. No type = empty node, path-building
 	 *	2. No parent = root node, others should not do this
-	 *	3. No data = only allowed for empty node
-	 *	4. Iterator = optional, data can be flat
-	 *	5. Name cannot contain / (except root) to allow path traversal
-	 *	6. Path is defined as <ROOT>/<NODE-1>/<NODE-2>/.../<NODE-X>
+	 *	3. get_data/set_data - filled later by registering function
+	 *	4. Name cannot contain / (except root) to allow path traversal
+	 *	5. Path is defined as <ROOT>/<NODE-1>/<NODE-2>/.../<NODE-X>
 	 */
 	template <typename string_t>
 	xpath_node(	string_t		&&name,
-				xtype			*type,
-				xpath_node		*parent,
-				void			*xdata,
-				mri_iterator_cb	data_iter)
+				xpath_node		*parent)
 	: m_name(std::forward<string_t>(name))
 	, m_sub_nodes()
-	, m_type(type)
 	, m_parent(parent)
-	, m_tid(_gettid())
-	, m_xdata(xdata)
-	, m_xdata_iterator(data_iter)
-	{ mri_assert(parent || ! xdata);  }
+	, m_get_data()
+	, m_set_data()
+	{}
+
+	/**
+	 * get_fully_qualified_path()
+	 *	Most likely used for logging and debugging
+	 *	@return std::string - full path of the node
+	 */
+	std::string get_fully_qualified_path() {
+		if (! m_parent) return "";
+		return m_parent->get_fully_qualified_path() + "/" + m_name;
+	}
+
+	/**
+	 * Fetch requested sub-node (get-create mode)
+	 *	@param name - string_view representing name of the node requested (avoid malloc)
+	 *	@return xpath_node const * - pointer to the newly created sub-node (nullptr on failure)
+	 */
+	xpath_node const *fetch_subnode(std::string_view name);
+
+	/**
+	 * Dump the node-data into the result-set
+	 *	@param rs - reference to result-set to output into
+	 *	@return bool - did we add anything into result-set
+	 */
+	bool xdump(mri_node_result_set_t &rs);
 };
 
 /* Root node is available for all */

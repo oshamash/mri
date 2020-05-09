@@ -33,12 +33,15 @@ import os
 import platform
 import os.path as p
 import subprocess
+import json
+import re
+import logging
+
+logger = logging.getLogger('ycm-extra-conf')
 
 DIR_OF_THIS_SCRIPT = p.abspath( p.dirname( __file__ ) )
 DIR_OF_THIRD_PARTY = p.join( DIR_OF_THIS_SCRIPT, 'third_party' )
 SOURCE_EXTENSIONS = [ '.cpp', '.cxx', '.cc', '.c', '.m', '.mm' ]
-
-database = None
 
 # These are the compilation flags that will be used in case there's no
 # compilation database set (by default, one is not set).
@@ -57,12 +60,6 @@ flags = [
 '-DYCM_EXPORT=',
 # Custome flags
 '-Iinclude',
-# THIS IS IMPORTANT! Without the '-x' flag, Clang won't know which language to
-# use when compiling headers. So it will guess. Badly. So C++ headers will be
-# compiled as C headers. You don't want that so ALWAYS specify the '-x' flag.
-# For a C project, you would set this to 'c' instead of 'c++'.
-'-x',
-'c++',
 '-isystem',
 'cpp/pybind11',
 '-isystem',
@@ -91,12 +88,6 @@ get_python_inc(),
 'cpp/ycm/benchmarks/benchmark/include',
 ]
 
-# Clang automatically sets the '-std=' flag to 'c++14' for MSVC 2015 or later,
-# which is required for compiling the standard library, and to 'c++11' for older
-# versions.
-if platform.system() != 'Windows':
-  flags.append( '-std=c++17' )
-
 
 # Set this to the absolute path to the folder (NOT the file!) containing the
 # compile_commands.json file to use that instead of 'flags'. See here for
@@ -108,8 +99,6 @@ if platform.system() != 'Windows':
 #
 # Most projects will NOT need to set this to anything; you can just change the
 # 'flags' list of compilation flags. Notice that YCM itself uses that approach.
-compilation_database_folder = ''
-
 
 def IsHeaderFile( filename ):
   extension = p.splitext( filename )[ 1 ]
@@ -134,14 +123,57 @@ def PathToPythonUsedDuringBuild():
   except OSError:
     return None
 
+def dirwalk_up(bottom):
+    """
+    mimic os.walk, but walk 'up'
+    instead of down the directory tree
+    """
+
+    bottom = p.realpath(bottom)
+
+    #get files in current dir
+    try:
+        names = os.listdir(bottom)
+    except Exception as e:
+        print(e)
+        return
+
+
+    dirs = []
+    files = []
+    for name in names:
+        if p.isdir(p.join(bottom, name)):
+            dirs.append(name)
+        elif p.isfile(p.join(bottom, name)):
+            files.append(name)
+
+    yield bottom, dirs, files
+
+    new_path = p.realpath(p.join(bottom, '..'))
+
+    # see if we are at the top
+    if new_path == bottom:
+        return
+
+    for x in dirwalk_up(new_path):
+        yield x
+
+def FindNearBuildPath(filename):
+    file_dir = p.dirname(filename)
+    for path, dirs, files in dirwalk_up(file_dir):
+        if "compile_comands.json" in files:
+            return path
+        if path == os.getcwd():
+            return None
+        for rdir in dirs:
+            if rdir == "build" and p.exists(rdir + "/compile_commands.json"):
+                return "{}/build".format(path)
+    return None
+
 
 def Settings( **kwargs ):
   # Do NOT import ycm_core at module scope.
   import ycm_core
-
-  global database
-  if database is None and p.exists( compilation_database_folder ):
-    database = ycm_core.CompilationDatabase( compilation_database_folder )
 
   language = kwargs[ 'language' ]
 
@@ -154,34 +186,105 @@ def Settings( **kwargs ):
     # in the corresponding source file.
     filename = FindCorrespondingSourceFile( kwargs[ 'filename' ] )
 
-    if not database:
-      return {
-        'flags': flags,
-        'include_paths_relative_to_dir': DIR_OF_THIS_SCRIPT,
-        'override_filename': filename
-      }
+    logger.info("Calculating flags for {}".format(filename))
 
-    compilation_info = database.GetCompilationInfoForFile( filename )
-    if not compilation_info.compiler_flags_:
-      return {}
+    # If we can't find compilation DB -> fallback to flags
+    compilation_database_folder = FindNearBuildPath(filename)
+    if not compilation_database_folder:
+        logger.info("Could not find build-path, using default falgs")
+        cpy_flags = flags
+        if any([filename.endswith(x) for x in ("c", "cc", "h", "hh")]):
+            cpy_flags += ['-x', 'c', '-std=c11']
+        elif any([filename.endswith(x) for x in ("cpp", "cxx", "hpp", "hxx")]):
+            cpy_flags += ['-x', 'c++', '-std=c++17']
+        return {
+          'flags': cpy_flags,
+          'include_paths_relative_to_dir': DIR_OF_THIS_SCRIPT,
+          'override_filename': filename
+        }
 
-    # Bear in mind that compilation_info.compiler_flags_ does NOT return a
-    # python list, but a "list-like" StringVec object.
-    final_flags = list( compilation_info.compiler_flags_ )
-
-    # NOTE: This is just for YouCompleteMe; it's highly likely that your project
-    # does NOT need to remove the stdlib flag. DO NOT USE THIS IN YOUR
-    # ycm_extra_conf IF YOU'RE NOT 100% SURE YOU NEED IT.
     try:
-      final_flags.remove( '-stdlib=libc++' )
-    except ValueError:
-      pass
+        logger.info("Found build-path, opening {}/compile_commands.json".format(compilation_database_folder))
+        db_file = open(compilation_database_folder + "/compile_commands.json")
+        database = json.load(db_file)
+        entry = [e for e in database if e['file'].endswith(filename)]
+        if not entry:
+            logger.info("No entry for {} in compilation-db".format(filename))
+            raise Exception("No entry")
+        logger.info("Found entry for {} in compilation-db".format(filename))
+        entry = entry[0]
+        entry_fname = entry['file']
+        entry_command = entry['command']
+        entry_directory = entry['directory']
 
-    return {
-      'flags': final_flags,
-      'include_paths_relative_to_dir': compilation_info.compiler_working_dir_,
-      'override_filename': filename
-    }
+        iterable = iter(entry_command.split())
+        final_flags = [] + RTE_INCLUDES
+        try:
+            current = next(iterable)
+
+            # Skip until flags
+            clang_compilers = ("clang")
+            c_compilers = ("gcc", "c", "cc")
+            cpp_compilers = ("g++", "c++")
+            while True:
+                # already a flag - keep it
+                if current.startswith('-'):
+                    break
+                # Skip filename
+                if current == entry_fname:
+                    current = next(iterable)
+                    break
+                # c-compiler, use -x flag to indicate clangd we are handling C file
+                if current in c_compilers or any([current.endswith("/" + c) for c in c_compilers]):
+                    final_flags += ['-x', 'c']
+                    current = next(iterable)
+                    break
+                # cpp-compiler, use -x flag to indicate clangd we are handling C++ file
+                elif current in cpp_compilers or any([current.endswith("/" + c) for c in cpp_compilers]):
+                    final_flags += ['-x', 'c++']
+                    current = next(iterable)
+                    break
+                # for clang, it should already contain the -x flag
+                elif current in clang_compilers or any([current.endswith("/" + c) for c in clang_compilers]):
+                    current = next(iterable)
+                    break
+                current = next(iterable)
+
+
+            while True:
+                # Defines, includes can be multi-param
+                if current in ("-D", "-I"):
+                    final_flags += [current.append(next(iterable))]
+                # Double-skip these flags (-c file, -o file)
+                elif current in ("-o", "-c"):
+                    current = next(iterable)
+                # Normal flag
+                else:
+                    final_flags += [current]
+                current = next(iterable)
+
+
+        except StopIteration:
+            pass
+
+        logger.info("Successfully loaded flags from compilation-db")
+        return {
+          'flags': final_flags,
+          'include_paths_relative_to_dir': relative_dir,
+          'override_filename': filename
+        }
+    except:
+        logger.warn("Using default flags")
+        cpy_flags = flags
+        if any([filename.endswith(x) for x in ("c", "cc", "h", "hh")]):
+            cpy_flags += ['-x', 'c', '-std=c11']
+        elif any([filename.endswith(x) for x in ("cpp", "cxx", "hpp", "hxx")]):
+            cpy_flags += ['-x', 'c++', '-std=c++17']
+        return {
+          'flags': cpy_flags,
+          'include_paths_relative_to_dir': DIR_OF_THIS_SCRIPT,
+          'override_filename': filename
+        }
 
   if language == 'python':
     return {
