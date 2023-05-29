@@ -1,0 +1,10 @@
+.cproject
+.project
+*.idea/
+.pydevproject
+*.pyc
+.vscode/
+GPATH
+GRTAGS
+GTAGS
+
